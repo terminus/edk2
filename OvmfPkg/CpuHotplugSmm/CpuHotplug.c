@@ -53,6 +53,14 @@ STATIC CPU_HOT_PLUG_DATA *mCpuHotPlugData;
 STATIC APIC_ID *mPluggedApicIds;
 STATIC APIC_ID *mToUnplugApicIds;
 //
+// Similar to the SMRAM arrays above mHotunplugWork stores APIC IDs of
+// processors with pending unplugs for the duration of the MMI.
+//
+// This array maps ProcessorNum -> APIC ID and so has room for possible
+// CPU count.
+//
+STATIC APIC_ID *mHotUnplugWork;
+//
 // Address of the non-SMRAM reserved memory page that contains the Post-SMM Pen
 // for hot-added CPUs.
 //
@@ -182,6 +190,100 @@ Fatal:
 }
 
 /**
+  CPU Hot-unplug handler function.
+
+  @param[in] mUnplugApicIds      List of APIC IDs to be unplugged.
+
+  @param[in] ToUnplugCount       Count of APIC IDs to be unplugged.
+
+  @param[out] mHotUnplugWork     List mapping ProcessorNum -> APIC ID for later unplug.
+                                 Invalid entries are specified as MAX_UINT32.
+
+  @retval EFI_SUCCESS	         Some of the requested APIC IDs will be hot-unplugged.
+
+  @retval EFI_INTERRUPT_PENDING  Fatal error while hot-plugging.
+
+**/
+STATIC
+EFI_STATUS
+EFIAPI
+UnplugCpus(
+  IN APIC_ID                      *mUnplugApicIds,
+  IN UINT32                       ToUnplugCount,
+  OUT APIC_ID                     *mHotUnplugWork
+  )
+{
+  EFI_STATUS Status = EFI_SUCCESS;
+  UINT32     ToUnplugIdx;
+
+    //
+    // Remove the CPU with EFI_SMM_CPU_SERVICE_PROTOCOL.
+    //
+
+  ToUnplugIdx = 0;
+  while (ToUnplugIdx < ToUnplugCount) {
+    APIC_ID    RemoveApicId;
+    UINT32     ProcessorNum;
+
+    RemoveApicId = mUnplugApicIds[ToUnplugIdx];
+
+    for (ProcessorNum = 0;
+         ProcessorNum < mCpuHotPlugData->ArrayLength;
+         ProcessorNum++) {
+      if (mCpuHotPlugData->ApicId[ProcessorNum] == RemoveApicId) {
+        break;
+      }
+    }
+
+      //
+      // Ignore the unplug if APIC ID is not found
+      //
+    if (ProcessorNum == mCpuHotPlugData->ArrayLength) {
+      DEBUG ((DEBUG_VERBOSE, "%a: did not find APIC ID " FMT_APIC_ID " to unplug\n",
+        __FUNCTION__, RemoveApicId));
+      ToUnplugIdx++;
+      continue;
+    }
+
+    Status = mMmCpuService->RemoveProcessor (mMmCpuService, ProcessorNum);
+
+    if (EFI_ERROR(Status)) {
+      DEBUG ((DEBUG_ERROR, "%a: RemoveProcessor(" FMT_APIC_ID "): %r\n",
+        __FUNCTION__, RemoveApicId, Status));
+      goto Fatal;
+    } else {
+      //
+      // Stash the APIC IDs so we can do the actual unplug later.
+      //
+
+      if (mHotUnplugWork[ProcessorNum] != MAX_UINT32) {
+       //
+	// Since ProcessorNum and APIC-ID are a 1-1 mapping, so an already
+	// filled mHotUnplugWork[ProcessorNum] is a fatal error.
+	//
+        DEBUG ((DEBUG_ERROR, "%a: ProcessorNum %u maps to " FMT_APIC_ID ", cannot map to " FMT_APIC_ID "\n",
+          __FUNCTION__, ProcessorNum, mHotUnplugWork[ProcessorNum], RemoveApicId));
+        goto Fatal;
+      }
+
+      DEBUG ((DEBUG_INFO, "%a: Caching ProcessorNum %u -> " FMT_APIC_ID " for unplugging\n",
+          __FUNCTION__, ProcessorNum, RemoveApicId));
+      mHotUnplugWork[ProcessorNum] = RemoveApicId;
+    }
+
+    ToUnplugIdx++;
+  }
+
+  //
+  // We've handled this unplug.
+  //
+  return EFI_SUCCESS;
+
+Fatal:
+  return EFI_INTERRUPT_PENDING;
+}
+
+/**
   CPU Hotplug MMI handler function.
 
   This is a root MMI handler.
@@ -297,6 +399,8 @@ CpuHotplugMmi (
 
   if (PluggedCount > 0) {
     Status = PlugCpus(mPluggedApicIds, PluggedCount);
+  } else if (ToUnplugCount > 0) {
+    Status = UnplugCpus(mToUnplugApicIds, ToUnplugCount, mHotUnplugWork);
   }
 
   if (EFI_ERROR(Status)) {
@@ -330,6 +434,7 @@ CpuHotplugEntry (
 {
   EFI_STATUS Status;
   UINTN      Size;
+  UINTN      Idx;
 
   //
   // This module should only be included when SMM support is required.
@@ -403,12 +508,36 @@ CpuHotplugEntry (
   }
 
   //
+  // Allocate for the full CPU count. We index to-be-unplugged APIC IDs
+  // with ProcessorNum.
+  //
+  if (RETURN_ERROR (SafeUintnMult (sizeof (APIC_ID), mCpuHotPlugData->ArrayLength, &Size))) {
+    Status = EFI_ABORTED;
+    DEBUG ((DEBUG_ERROR, "%a: invalid CPU_HOT_PLUG_DATA\n", __FUNCTION__));
+    goto ReleaseToUnplugApicIds;
+  }
+  Status = gMmst->MmAllocatePool (EfiRuntimeServicesData, Size,
+                    (VOID **)&mHotUnplugWork);
+  if (EFI_ERROR (Status)) {
+    DEBUG ((DEBUG_ERROR, "%a: MmAllocatePool(): %r\n", __FUNCTION__, Status));
+    goto ReleaseToUnplugApicIds;
+  }
+
+  //
+  // We will use mHotUnplugWork to map from ProcessorNum -> APIC_ID.
+  // Initialize to known invalid values.
+  //
+  for (Idx = 0; Idx < mCpuHotPlugData->ArrayLength; Idx++) {
+    mHotUnplugWork[Idx] = MAX_UINT32;
+  }
+
+  //
   // Allocate the Post-SMM Pen for hot-added CPUs.
   //
   Status = SmbaseAllocatePostSmmPen (&mPostSmmPenAddress,
              SystemTable->BootServices);
   if (EFI_ERROR (Status)) {
-    goto ReleaseToUnplugApicIds;
+    goto ReleaseToHotUnplugWork;
   }
 
   //
@@ -467,6 +596,10 @@ CpuHotplugEntry (
 ReleasePostSmmPen:
   SmbaseReleasePostSmmPen (mPostSmmPenAddress, SystemTable->BootServices);
   mPostSmmPenAddress = 0;
+
+ReleaseToHotUnplugWork:
+  gMmst->MmFreePool (mHotUnplugWork);
+  mHotUnplugWork = NULL;
 
 ReleaseToUnplugApicIds:
   gMmst->MmFreePool (mToUnplugApicIds);
