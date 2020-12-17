@@ -247,6 +247,7 @@ typedef struct {
   VOID                            **CpuSaveState;
 
   EFI_SMM_RESERVED_SMRAM_REGION   SmmReservedSmramRegion[1];
+  EFI_SMM_SHUTDOWN_AP             SmmShutdownAp;
   EFI_SMM_ENTRY_CONTEXT           SmmCoreEntryContext;
   EFI_SMM_ENTRY_POINT             SmmCoreEntry;
 

@@ -22,6 +22,7 @@ SMM_CPU_PRIVATE_DATA  mSmmCpuPrivateData = {
   NULL,                                         // Pointer to CpuSaveStateSize array
   NULL,                                         // Pointer to CpuSaveState array
   { {0} },                                      // SmmReservedSmramRegion
+  NULL,                                         // SmmShutdownAp
   {
     SmmStartupThisAp,                           // SmmCoreEntryContext.SmmStartupThisAp
     0,                                          // SmmCoreEntryContext.CurrentlyExecutingCpu

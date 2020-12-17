@@ -49,6 +49,7 @@ EFI_STATUS
   IN UINTN                          TableSize
   );
 
+typedef  EFI_MM_SHUTDOWN_AP                    EFI_SMM_SHUTDOWN_AP;
 typedef  EFI_MM_STARTUP_THIS_AP                EFI_SMM_STARTUP_THIS_AP;
 typedef  EFI_MM_NOTIFY_FN                      EFI_SMM_NOTIFY_FN;
 typedef  EFI_MM_REGISTER_PROTOCOL_NOTIFY       EFI_SMM_REGISTER_PROTOCOL_NOTIFY;
@@ -137,6 +138,7 @@ struct _EFI_SMM_SYSTEM_TABLE2 {
   ///
   /// MP service
   ///
+  EFI_SMM_SHUTDOWN_AP                  SmmShutdownAp;
   EFI_SMM_STARTUP_THIS_AP              SmmStartupThisAp;
 
   ///

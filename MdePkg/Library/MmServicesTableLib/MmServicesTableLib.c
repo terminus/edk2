@@ -55,3 +55,14 @@ MmServicesTableLibConstructor (
 
   return EFI_SUCCESS;
 }
+
+EFI_STATUS
+EFIAPI
+MmRegisterShutdownInterface (
+  IN      EFI_MM_SHUTDOWN_AP          Procedure
+  )
+{
+  gMmst->MmShutdownAp = Procedure;
+
+  return EFI_SUCCESS;
+}

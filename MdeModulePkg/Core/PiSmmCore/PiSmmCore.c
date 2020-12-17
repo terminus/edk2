@@ -39,6 +39,7 @@ EFI_SMM_SYSTEM_TABLE2  gSmmCoreSmst = {
   SmmFreePool,
   SmmAllocatePages,
   SmmFreePages,
+  NULL,                          // SmmShutdownAp
   NULL,                          // SmmStartupThisAp
   0,                             // CurrentlyExecutingCpu
   0,                             // NumberOfCpus

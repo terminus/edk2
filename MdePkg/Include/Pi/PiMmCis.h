@@ -77,6 +77,14 @@ EFI_STATUS
   IN OUT VOID          *ProcArguments OPTIONAL
   );
 
+typedef
+EFI_STATUS
+(EFIAPI *EFI_MM_SHUTDOWN_AP)(
+  IN UINTN             CpuNumber,
+  IN BOOLEAN           IsBSP
+  );
+
+
 /**
   Function prototype for protocol install notification.
 
@@ -242,6 +250,13 @@ VOID
   IN CONST EFI_MM_ENTRY_CONTEXT  *MmEntryContext
   );
 
+EFI_STATUS
+EFIAPI
+MmRegisterShutdownInterface (
+  IN EFI_MM_SHUTDOWN_AP    Procedure
+  );
+
+
 ///
 /// Management Mode System Table (MMST)
 ///
@@ -282,6 +297,7 @@ struct _EFI_MM_SYSTEM_TABLE {
   ///
   /// MP service
   ///
+  EFI_MM_SHUTDOWN_AP                   MmShutdownAp;
   EFI_MM_STARTUP_THIS_AP               MmStartupThisAp;
 
   ///
