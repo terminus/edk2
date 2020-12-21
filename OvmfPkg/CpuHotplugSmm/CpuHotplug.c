@@ -421,6 +421,69 @@ Fatal:
   return EFI_INTERRUPT_PENDING;
 }
 
+EFI_STATUS
+EFIAPI
+CpuUnplugExitWork(
+  IN UINTN CpuIndex,
+  IN BOOLEAN IsBSP
+  )
+{
+  APIC_ID RemoveApicId;
+
+  RemoveApicId = mHotUnplugWork[CpuIndex];
+
+  if (!IsBSP && RemoveApicId == MAX_UINT32) {
+    return EFI_SUCCESS;
+  }
+
+  if (IsBSP) {
+    UINT32 Idx;
+    for (Idx = 0; Idx < mCpuHotPlugData->ArrayLength; Idx++) {
+      RemoveApicId = mHotUnplugWork[Idx];
+
+      if (RemoveApicId != MAX_UINT32) {
+	//
+	// The CPU(s) to be unplugged have received the BSP's signal to exit the
+	// SMI and either will execute SmmCpuFeaturesSmiRendezvousExit() and this
+	// callback or are waiting here.
+	//
+	// Tell HW to put it out of its misery.
+	//
+        QemuCpuhpWriteCpuSelector (mMmCpuIo, RemoveApicId);
+        QemuCpuhpWriteCpuStatus (mMmCpuIo, QEMU_CPUHP_STAT_EJECTED);
+
+	//
+	// Barrier to ensure that the compiler doesn't reorder the next store
+	//
+	MemoryFence();
+
+	//
+	// Clear the unplug status to make sure that an invalid SMI later
+	// does not try to do an unplug or go to the dead loop.
+	//
+	mHotUnplugWork[Idx] = MAX_UINT32;
+
+        DEBUG ((DEBUG_INFO, "%a: Unplugged CPU " FMT_APIC_ID "\n",
+		__FUNCTION__, RemoveApicId));
+      }
+    }
+    return EFI_SUCCESS;
+  }
+  
+  //
+  // CPU(s) being unplugged get here from SmmCpuFeaturesSmiRendezvousExit()
+  // after having been cleared to exit the SMI by the monarch and thus have
+  // no SMM processing remaining.
+  //
+  // Given that we cannot allow them to escape to the guest, we pen them
+  // here until the SMM monarch tells the HW to unplug them.
+  //
+
+  CpuDeadLoop ();
+
+  return EFI_ABORTED;
+}
+
 
 //
 // Entry point function of this driver.
@@ -571,6 +634,11 @@ CpuHotplugEntry (
       __FUNCTION__, Status));
     goto ReleasePostSmmPen;
   }
+
+  //
+  // Register handler for hot-unplugging an AP.
+  //
+  MmRegisterShutdownInterface(CpuUnplugExitWork);
 
   //
   // Register the handler for the CPU Hotplug MMI.

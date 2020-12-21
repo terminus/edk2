@@ -1727,6 +1727,12 @@ SmiRendezvous (
     }
   }
 
+  //
+  // Note that the BSP will unplug any CPUs that have been marked for
+  // hot-unplug at any point after it sets AllCpusInSync = FALSE
+  // so it cannot depend on an AP executing code post that point.
+  //
+
 Exit:
   SmmCpuFeaturesRendezvousExit (CpuIndex, IsBsp);
 
