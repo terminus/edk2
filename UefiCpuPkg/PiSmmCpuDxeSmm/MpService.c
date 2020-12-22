@@ -1728,7 +1728,7 @@ SmiRendezvous (
   }
 
 Exit:
-  SmmCpuFeaturesRendezvousExit (CpuIndex);
+  SmmCpuFeaturesRendezvousExit (CpuIndex, IsBsp);
 
   //
   // Restore Cr2

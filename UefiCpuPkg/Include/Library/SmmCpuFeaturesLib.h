@@ -259,11 +259,13 @@ SmmCpuFeaturesRendezvousEntry (
   @param[in] CpuIndex  The index of the CPU that is exiting SMM.  The value must
                        be between 0 and the NumberOfCpus field in the System
                        Management System Table (SMST).
+  @param[in] IsBSP     Is this CPU the SMM BSP?
 **/
 VOID
 EFIAPI
 SmmCpuFeaturesRendezvousExit (
-  IN UINTN  CpuIndex
+  IN UINTN   CpuIndex,
+  IN BOOLEAN IsBSP
   );
 
 /**
