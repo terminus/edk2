@@ -1565,7 +1565,12 @@ SmiRendezvous (
 {
   EFI_STATUS                     Status;
   BOOLEAN                        ValidSmi;
-  BOOLEAN                        IsBsp;
+
+  //
+  // IsBsp starts out as false. Once a CPU gets elected as BSP,
+  // it will transition its value to true.
+  //
+  BOOLEAN                        IsBsp = FALSE;
   BOOLEAN                        BspInProgress;
   UINTN                          Index;
   UINTN                          Cr2;
@@ -1656,7 +1661,6 @@ SmiRendezvous (
       //
       // Elect BSP
       //
-      IsBsp = FALSE;
       if (FeaturePcdGet (PcdCpuSmmEnableBspElection)) {
         if (!mSmmMpSyncData->SwitchBsp || mSmmMpSyncData->CandidateBsp[CpuIndex]) {
           //
@@ -1679,6 +1683,8 @@ SmiRendezvous (
               (UINT32)-1,
               (UINT32)CpuIndex
               );
+
+            IsBsp = mSmmMpSyncData->BspIndex == (UINT32)CpuIndex;
           }
         }
       }
@@ -1686,7 +1692,7 @@ SmiRendezvous (
       //
       // "mSmmMpSyncData->BspIndex == CpuIndex" means this is the BSP
       //
-      if (mSmmMpSyncData->BspIndex == CpuIndex) {
+      if (IsBsp) {
 
         //
         // Clear last request for SwitchBsp.
